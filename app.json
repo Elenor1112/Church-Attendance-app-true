@@ -1,0 +1,67 @@
+{
+  "expo": {
+    "name": "Church Attendance",
+    "slug": "church-attendance",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "churchattendance",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.church.attendance",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Allow Church Attendance to scan member QR codes and update profile photos.",
+        "NSPhotoLibraryUsageDescription": "Allow Church Attendance to choose profile photos.",
+        "NSPhotoLibraryAddUsageDescription": "Allow Church Attendance to save your QR code.",
+        "NSUserNotificationsUsageDescription": "Allow Church Attendance to send church reminders and alerts."
+      }
+    },
+    "android": {
+      "package": "com.church.attendance",
+      "permissions": [
+        "CAMERA",
+        "READ_MEDIA_IMAGES",
+        "POST_NOTIFICATIONS"
+      ],
+      "adaptiveIcon": {
+        "backgroundColor": "#6b1f1f"
+      }
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-secure-store",
+        {
+          "configureAndroidBackup": true,
+          "faceIDPermission": "Allow Church Attendance to unlock your secure session."
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow Church Attendance to scan QR codes."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Church Attendance to choose profile photos.",
+          "cameraPermission": "Allow Church Attendance to take a profile photo."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#6b1f1f"
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "web": {
+      "bundler": "metro"
+    }
+  }
+}
