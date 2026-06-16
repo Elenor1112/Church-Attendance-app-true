@@ -1,32 +1,54 @@
 import { CameraView, useCameraPermissions, type BarcodeScanningResult } from "expo-camera";
-import { Clock3, ScanLine, Users } from "lucide-react-native";
+import { Clock3, ScanLine, Users, X, CheckCircle } from "lucide-react-native";
 import { useState } from "react";
-import { Alert, Pressable, Text, View } from "react-native";
+import { Alert, Modal, Pressable, Text, View, ScrollView } from "react-native";
 import { AppScreen, AppText, Avatar, Button, Card, LanguageToggle, StatusPill } from "@/components/ui";
 import { useRecordAttendanceMutation } from "@/features/queries";
 import { useAuth } from "@/lib/auth";
 import { useLang } from "@/lib/i18n";
 
+type FridayCategory = "contemporary_issues" | "bible_study" | "spirituality" | "saints_lives";
+
+const CATEGORIES: { key: FridayCategory; labelKey: string; emoji: string }[] = [
+  { key: "contemporary_issues", labelKey: "contemporaryIssues", emoji: "💬" },
+  { key: "bible_study", labelKey: "bibleStudy", emoji: "📖" },
+  { key: "spirituality", labelKey: "spirituality", emoji: "🕊️" },
+  { key: "saints_lives", labelKey: "saintsLives", emoji: "✨" },
+];
+
 export default function ScannerScreen() {
-  const { t, lang } = useLang();
+  const { t, lang, isRtl } = useLang();
   const { user } = useAuth();
   const [permission, requestPermission] = useCameraPermissions();
   const [enabled, setEnabled] = useState(false);
   const [lastScan, setLastScan] = useState<string | null>(null);
+  const [pendingPayload, setPendingPayload] = useState<string | null>(null);
   const record = useRecordAttendanceMutation();
 
   const handleScan = async (result: BarcodeScanningResult) => {
     if (!enabled || !user || result.data === lastScan || record.isPending) return;
     setLastScan(result.data);
+    setEnabled(false);
+    // Show category picker instead of immediately recording
+    setPendingPayload(result.data);
+  };
+
+  const submitWithCategory = async (category: FridayCategory) => {
+    if (!pendingPayload || !user) return;
     try {
-      await record.mutateAsync({ payload: result.data, user });
-      Alert.alert(t("scanner"), t("qrRecorded"));
-      setEnabled(false);
+      await record.mutateAsync({ payload: pendingPayload, fridayCategory: category, user });
+      Alert.alert(t("scanner"), t("scanSuccess"));
     } catch {
       Alert.alert(t("scanner"), t("invalidQr"));
     } finally {
+      setPendingPayload(null);
       setTimeout(() => setLastScan(null), 1500);
     }
+  };
+
+  const cancelScan = () => {
+    setPendingPayload(null);
+    setTimeout(() => setLastScan(null), 500);
   };
 
   return (
@@ -60,7 +82,9 @@ export default function ScannerScreen() {
           ) : (
             <View className="flex-1 items-center justify-center">
               <ScanLine size={58} color="#d7aa3d" />
-              <AppText className="mt-3 text-center text-sm text-primary-foreground">{permission?.granted ? t("scanQr") : t("cameraPermission")}</AppText>
+              <AppText className="mt-3 text-center text-sm text-primary-foreground">
+                {permission?.granted ? t("scanQr") : t("cameraPermission")}
+              </AppText>
             </View>
           )}
           <View className="absolute left-4 top-4 h-7 w-7 rounded-tl-lg border-l-2 border-t-2 border-gold" />
@@ -74,7 +98,9 @@ export default function ScannerScreen() {
         ) : (
           <Button className="mt-5" onPress={() => setEnabled((value) => !value)}>
             <ScanLine size={17} color="#fffaf1" />
-            <Text className="text-sm font-extrabold text-primary-foreground">{enabled ? t("manualEntry") : t("scanQr")}</Text>
+            <Text className="text-sm font-extrabold text-primary-foreground">
+              {enabled ? t("manualEntry") : t("scanQr")}
+            </Text>
           </Button>
         )}
       </Card>
@@ -83,6 +109,37 @@ export default function ScannerScreen() {
         <Summary icon={Users} value="42" label={t("todayCheckIns")} />
         <Summary icon={Clock3} value="5" label={t("pendingApprovals")} gold />
       </View>
+
+      {/* Category Picker Modal */}
+      <Modal visible={!!pendingPayload} transparent animationType="slide">
+        <View className="flex-1 items-center justify-end bg-black/50 p-4">
+          <View className="w-full rounded-3xl bg-card p-6">
+            <View className="mb-4 flex-row items-center justify-between">
+              <AppText className="text-base font-extrabold">{t("selectCategory")}</AppText>
+              <Pressable onPress={cancelScan} className="h-8 w-8 items-center justify-center rounded-full bg-secondary">
+                <X size={16} color="#888" />
+              </Pressable>
+            </View>
+            <AppText className="mb-4 text-xs" muted>
+              {lang === "ar" ? "اختر فئة الجمعة قبل تأكيد الحضور" : "Select the Friday category before confirming"}
+            </AppText>
+            <View className="flex-row flex-wrap gap-3">
+              {CATEGORIES.map((cat) => (
+                <Pressable
+                  key={cat.key}
+                  onPress={() => submitWithCategory(cat.key)}
+                  disabled={record.isPending}
+                  className="flex-1 items-center justify-center rounded-2xl border border-border bg-secondary py-4"
+                  style={{ minWidth: "45%" }}
+                >
+                  <Text className="text-2xl">{cat.emoji}</Text>
+                  <AppText className="mt-1 text-center text-xs font-semibold">{t(cat.labelKey as any)}</AppText>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+        </View>
+      </Modal>
     </AppScreen>
   );
 }

@@ -77,7 +77,8 @@ export function useDashboardQuery() {
 export function useRecordAttendanceMutation() {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: ({ payload, user }: { payload: string; user: User }) => api.recordAttendance(payload, user),
+    mutationFn: ({ payload, fridayCategory, user }: { payload: string; fridayCategory?: string; user: User }) =>
+      api.recordAttendance(payload, user, fridayCategory),
     onSuccess: () => {
       client.invalidateQueries({ queryKey: ["attendanceLogs"] });
       client.invalidateQueries({ queryKey: queryKeys.dashboard });

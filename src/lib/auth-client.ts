@@ -8,6 +8,8 @@ export interface User {
   role: "member" | "admin" | "super-admin";
   status: "pending" | "approved" | "rejected";
   photoUri?: string;
+  permissions?: string[];
+  completedSets?: number;
 }
 
 export interface Session {

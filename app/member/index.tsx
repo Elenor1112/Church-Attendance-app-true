@@ -67,9 +67,39 @@ export default function MemberHome() {
       </Card>
 
       <View className="mt-5 flex-row gap-3">
-        <Overview icon={CheckCircle2} label={t("attendance")} value={lang === "ar" ? "١٢ مرة" : "12 visits"} sub={lang === "ar" ? "هذا الشهر" : "this month"} />
+        <Overview icon={CheckCircle2} label={t("attendance")} value={lang === "ar" ? `${data?.visitsThisMonth ?? 0} مرة` : `${data?.visitsThisMonth ?? 0} visits`} sub={lang === "ar" ? "هذا الشهر" : "this month"} />
         <Overview icon={Megaphone} label={t("announcements")} value={`${data?.unreadAnnouncements ?? 0}`} sub={lang === "ar" ? "غير مقروءة" : "unread"} gold />
       </View>
+
+      {/* Friday Set Progress */}
+      <Card className="mt-4 rounded-2xl">
+        <View className="flex-row items-center justify-between">
+          <AppText className="text-sm font-extrabold">{t("currentSetProgress" as any)}</AppText>
+          <Text className="text-xs font-extrabold text-gold-foreground">
+            🏆 {t("completedSets" as any)}: {user?.completedSets ?? 0}
+          </Text>
+        </View>
+        <View className="mt-3 flex-row gap-2">
+          {(["💬", "📖", "🕊️", "✨"] as const).map((emoji, i) => {
+            const labels = [
+              { ar: "قضايا معاصرة", en: "Contemporary Issues" },
+              { ar: "كتاب مقدس", en: "Bible Study" },
+              { ar: "روحانيات", en: "Spirituality" },
+              { ar: "سير قديسين", en: "Lives of Saints" },
+            ];
+            const done = false; // Progress tracked server-side; show neutral state in mock
+            return (
+              <View
+                key={i}
+                className={`flex-1 items-center rounded-xl py-2 ${done ? "bg-success-soft" : "bg-secondary"}`}
+              >
+                <Text className="text-base">{emoji}</Text>
+                <Text className="mt-1 text-center text-[9px] text-muted-foreground">{labels[i][lang]}</Text>
+              </View>
+            );
+          })}
+        </View>
+      </Card>
 
       <Link href="/member/qr" asChild>
         <View className="mt-5 flex-row items-center justify-between rounded-2xl border border-primary/20 bg-primary-soft px-4 py-3">

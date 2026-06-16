@@ -3,13 +3,14 @@ import { db } from "../../../db";
 import { members, notifications, attendanceLogs } from "../../../db/schema";
 import { eq, isNull, or } from "drizzle-orm";
 import { verifyToken } from "../../../lib/auth-server";
+import { requirePermission } from "../../../lib/permissions";
 
 export const Route = createAPIFileRoute("/api/admin/comms")({
   GET: async ({ request }) => {
     try {
       const tokenUser = verifyToken(request);
       if (!tokenUser || (tokenUser.role !== "admin" && tokenUser.role !== "super-admin")) {
-        return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        return new Response(JSON.stringify({ error: "Unauthorized", code: "UNAUTHORIZED" }), {
           status: 401,
           headers: { "Content-Type": "application/json" },
         });
@@ -111,31 +112,40 @@ export const Route = createAPIFileRoute("/api/admin/comms")({
     try {
       const tokenUser = verifyToken(request);
       if (!tokenUser || (tokenUser.role !== "admin" && tokenUser.role !== "super-admin")) {
-        return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        return new Response(JSON.stringify({ error: "Unauthorized", code: "UNAUTHORIZED" }), {
           status: 401,
           headers: { "Content-Type": "application/json" },
         });
       }
 
-      const body = await request.json();
-      const { type, message, recipientIds } = body;
+      if (tokenUser.role === "admin") {
+        const permError = await requirePermission(tokenUser.id, "send_messages");
+        if (permError) return permError;
+      }
 
-      if (!message || !recipientIds || !Array.isArray(recipientIds)) {
-        return new Response(JSON.stringify({ error: "Missing alert data" }), {
+      const body = await request.json();
+      const { type, message, titleAr, titleEn, bodyAr, bodyEn, recipientIds } = body;
+
+      if ((!message && !bodyAr && !bodyEn) || !recipientIds || !Array.isArray(recipientIds)) {
+        return new Response(JSON.stringify({ error: "Missing alert data", code: "MISSING_DATA" }), {
           status: 400,
           headers: { "Content-Type": "application/json" },
         });
       }
 
+      const finalTitleAr = titleAr || (type === "standard" ? "إشعار جديد" : "رسالة مخصصة");
+      const finalTitleEn = titleEn || (type === "standard" ? "New alert" : "Custom message");
+      const finalBodyAr = bodyAr || message || "";
+      const finalBodyEn = bodyEn || message || "";
       const notificationId = `n-${Date.now()}`;
 
       if (recipientIds.length === 0 || (recipientIds.length === 1 && recipientIds[0] === "all")) {
         await db.insert(notifications).values({
           id: notificationId,
-          titleAr: type === "standard" ? "إشعار جديد" : "رسالة مخصصة",
-          titleEn: type === "standard" ? "New alert" : "Custom message",
-          bodyAr: message,
-          bodyEn: message,
+          titleAr: finalTitleAr,
+          titleEn: finalTitleEn,
+          bodyAr: finalBodyAr,
+          bodyEn: finalBodyEn,
           timeAr: "الآن",
           timeEn: "Now",
           unread: true,
@@ -145,10 +155,10 @@ export const Route = createAPIFileRoute("/api/admin/comms")({
         for (const recipientId of recipientIds) {
           await db.insert(notifications).values({
             id: `${notificationId}-${recipientId}`,
-            titleAr: type === "standard" ? "إشعار جديد" : "رسالة مخصصة",
-            titleEn: type === "standard" ? "New alert" : "Custom message",
-            bodyAr: message,
-            bodyEn: message,
+            titleAr: finalTitleAr,
+            titleEn: finalTitleEn,
+            bodyAr: finalBodyAr,
+            bodyEn: finalBodyEn,
             timeAr: "الآن",
             timeEn: "Now",
             unread: true,

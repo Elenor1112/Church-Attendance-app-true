@@ -19,6 +19,8 @@ export type User = {
   role: Role;
   status: MemberStatus;
   photoUri?: string;
+  permissions?: string[];
+  completedSets?: number;
 };
 
 export type MemberRecord = User & {
@@ -37,6 +39,8 @@ export type NotificationItem = {
   unread: boolean;
 };
 
+export type FridayCategory = "contemporary_issues" | "bible_study" | "spirituality" | "saints_lives";
+
 export type AttendanceLog = {
   id: string;
   memberId: string;
@@ -45,6 +49,18 @@ export type AttendanceLog = {
   date: Localized;
   status: "on-time" | "late";
   scannedBy?: Localized;
+  fridayCategory?: FridayCategory | null;
+};
+
+export type SetNotification = {
+  id: string;
+  memberId: string;
+  memberName: Localized;
+  completedSets: number;
+  triggeredAt: string;
+  acknowledged: boolean;
+  acknowledgedBy?: string;
+  acknowledgedAt?: string;
 };
 
 export type Birthday = {

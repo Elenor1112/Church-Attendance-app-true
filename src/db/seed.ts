@@ -1,15 +1,16 @@
 import { db, pool } from "./index";
-import { members, verses, meetings, notifications, attendanceLogs, activityLogs } from "./schema";
+import { members, verses, meetings, notifications, attendanceLogs, activityLogs, setNotifications, adminPermissions } from "./schema";
 import bcrypt from "bcryptjs";
 
 async function seed() {
   console.log("Starting database seeding...");
 
-  // Generate password hash for demo accounts
   const demoPasswordHash = await bcrypt.hash("demo", 10);
 
-  // 1. Clean existing records
+  // 1. Clean existing records (order matters for FK constraints)
   console.log("Cleaning existing records...");
+  await db.delete(adminPermissions);
+  await db.delete(setNotifications);
   await db.delete(activityLogs);
   await db.delete(attendanceLogs);
   await db.delete(notifications);
@@ -17,9 +18,9 @@ async function seed() {
   await db.delete(meetings);
   await db.delete(verses);
 
-  // 2. Seed Users & Members
+  // 2. Seed Members
   console.log("Seeding members...");
-  const usersToInsert = [
+  await db.insert(members).values([
     {
       id: "m-1",
       phone: "+20 100 123 4567",
@@ -34,6 +35,7 @@ async function seed() {
       registered: "2024-05-15",
       approvedBy: "System",
       photoUri: "",
+      completedSets: 1,
     },
     {
       id: "m-2",
@@ -49,6 +51,7 @@ async function seed() {
       registered: "2024-09-12",
       approvedBy: "Mr. George Samuel",
       photoUri: "",
+      completedSets: 0,
     },
     {
       id: "m-3",
@@ -64,6 +67,7 @@ async function seed() {
       registered: "2024-08-30",
       approvedBy: "Mr. George Samuel",
       photoUri: "",
+      completedSets: 0,
     },
     {
       id: "m-4",
@@ -79,6 +83,7 @@ async function seed() {
       registered: "2025-06-10",
       approvedBy: "",
       photoUri: "",
+      completedSets: 0,
     },
     {
       id: "m-5",
@@ -94,6 +99,7 @@ async function seed() {
       registered: "2023-02-01",
       approvedBy: "System",
       photoUri: "",
+      completedSets: 0,
     },
     {
       id: "m-6",
@@ -109,6 +115,7 @@ async function seed() {
       registered: "2025-05-22",
       approvedBy: "",
       photoUri: "",
+      completedSets: 0,
     },
     {
       id: "m-7",
@@ -124,6 +131,7 @@ async function seed() {
       registered: "2022-01-15",
       approvedBy: "System",
       photoUri: "",
+      completedSets: 0,
     },
     {
       id: "m-8",
@@ -139,6 +147,7 @@ async function seed() {
       registered: "2025-06-11",
       approvedBy: "",
       photoUri: "",
+      completedSets: 0,
     },
     {
       id: "m-9",
@@ -154,10 +163,26 @@ async function seed() {
       registered: "2025-06-12",
       approvedBy: "",
       photoUri: "",
+      completedSets: 0,
     },
-  ];
-
-  await db.insert(members).values(usersToInsert);
+    // Admin with limited permissions (only scan + view_logs)
+    {
+      id: "m-10",
+      phone: "+20 100 444 9999",
+      nameAr: "إيليا ناصر",
+      nameEn: "Elia Nasser",
+      email: "elia.nasser@example.com",
+      birthday: "1985-06-20",
+      spousePhone: "",
+      passwordHash: demoPasswordHash,
+      role: "admin",
+      status: "approved",
+      registered: "2024-01-10",
+      approvedBy: "Dr. Marcus Hanna",
+      photoUri: "",
+      completedSets: 0,
+    },
+  ]);
 
   // 3. Seed Verses
   console.log("Seeding verses...");
@@ -186,35 +211,91 @@ async function seed() {
     },
   ]);
 
-  // 5. Seed Attendance Logs
+  // 5. Seed Attendance Logs — includes all 4 Friday categories for Mina Adel (completed set)
   console.log("Seeding attendance logs...");
   await db.insert(attendanceLogs).values([
+    // Mina Adel completes a full Friday set
     {
-      id: "scan-1",
-      memberId: "m-2", // Marina Samir
+      id: "scan-1001",
+      memberId: "m-1",
+      dateAr: "الجمعة ٧ يونيو",
+      dateEn: "Friday, June 7",
+      time: "07:10 PM",
+      status: "on-time",
+      scannedBy: "Mr. George Samuel",
+      fridayCategory: "contemporary_issues",
+    },
+    {
+      id: "scan-1002",
+      memberId: "m-1",
+      dateAr: "الجمعة ١٤ يونيو",
+      dateEn: "Friday, June 14",
+      time: "07:05 PM",
+      status: "on-time",
+      scannedBy: "Mr. George Samuel",
+      fridayCategory: "bible_study",
+    },
+    {
+      id: "scan-1003",
+      memberId: "m-1",
+      dateAr: "الجمعة ٢١ يونيو",
+      dateEn: "Friday, June 21",
+      time: "07:08 PM",
+      status: "on-time",
+      scannedBy: "Mr. George Samuel",
+      fridayCategory: "spirituality",
+    },
+    {
+      id: "scan-1004",
+      memberId: "m-1",
+      dateAr: "الجمعة ٢٨ يونيو",
+      dateEn: "Friday, June 28",
+      time: "07:15 PM",
+      status: "on-time",
+      scannedBy: "Mr. George Samuel",
+      fridayCategory: "saints_lives",
+    },
+    // Marina Samir partial set (3 of 4)
+    {
+      id: "scan-2001",
+      memberId: "m-2",
+      dateAr: "الجمعة ٧ يونيو",
+      dateEn: "Friday, June 7",
+      time: "07:22 PM",
+      status: "on-time",
+      scannedBy: "Mr. George Samuel",
+      fridayCategory: "contemporary_issues",
+    },
+    {
+      id: "scan-2002",
+      memberId: "m-2",
+      dateAr: "الجمعة ١٤ يونيو",
+      dateEn: "Friday, June 14",
+      time: "07:19 PM",
+      status: "on-time",
+      scannedBy: "Mr. George Samuel",
+      fridayCategory: "bible_study",
+    },
+    {
+      id: "scan-2003",
+      memberId: "m-2",
       dateAr: "اليوم",
       dateEn: "Today",
       time: "07:42 PM",
       status: "on-time",
       scannedBy: "Mr. George Samuel",
+      fridayCategory: "spirituality",
     },
+    // Peter regular attendance (no category)
     {
-      id: "scan-2",
-      memberId: "m-3", // Peter Youssef
+      id: "scan-3001",
+      memberId: "m-3",
       dateAr: "اليوم",
       dateEn: "Today",
       time: "07:48 PM",
       status: "on-time",
       scannedBy: "Mr. George Samuel",
-    },
-    {
-      id: "scan-3",
-      memberId: "m-1", // Mina Adel
-      dateAr: "أمس",
-      dateEn: "Yesterday",
-      time: "07:30 PM",
-      status: "on-time",
-      scannedBy: "Mr. George Samuel",
+      fridayCategory: null,
     },
   ]);
 
@@ -230,7 +311,7 @@ async function seed() {
       timeAr: "منذ ساعتين",
       timeEn: "2h ago",
       unread: true,
-      userId: "m-1", // For Mina Adel
+      userId: "m-1",
     },
     {
       id: "n-2",
@@ -241,7 +322,7 @@ async function seed() {
       timeAr: "اليوم",
       timeEn: "Today",
       unread: true,
-      userId: "m-1", // For Mina Adel
+      userId: "m-1",
     },
     {
       id: "n-3",
@@ -263,46 +344,67 @@ async function seed() {
       timeAr: "الأسبوع الماضي",
       timeEn: "Last week",
       unread: false,
-      userId: null, // Global
+      userId: null,
+    },
+    // Set completion notification for admins
+    {
+      id: "n-set-sn-demo-m-5",
+      titleAr: "🎁 إتمام مجموعة الجمعة",
+      titleEn: "🎁 Friday Set Completed",
+      bodyAr: "مينا عادل أكمل مجموعة الجمعة الكاملة! (رمز الإشعار: sn-demo)",
+      bodyEn: "Mina Adel has completed a full Friday set! (ref: sn-demo)",
+      timeAr: "منذ أسبوع",
+      timeEn: "1w ago",
+      unread: true,
+      userId: "m-5",
+    },
+    {
+      id: "n-set-sn-demo-m-7",
+      titleAr: "🎁 إتمام مجموعة الجمعة",
+      titleEn: "🎁 Friday Set Completed",
+      bodyAr: "مينا عادل أكمل مجموعة الجمعة الكاملة! (رمز الإشعار: sn-demo)",
+      bodyEn: "Mina Adel has completed a full Friday set! (ref: sn-demo)",
+      timeAr: "منذ أسبوع",
+      timeEn: "1w ago",
+      unread: true,
+      userId: "m-7",
     },
   ]);
 
-  // 7. Seed Activity Logs
+  // 7. Seed Set Notification (acknowledged — Mina's first set)
+  console.log("Seeding set notifications...");
+  await db.insert(setNotifications).values([
+    {
+      id: "sn-demo",
+      memberId: "m-1",
+      triggeredAt: new Date("2026-06-09T19:15:00Z"),
+      acknowledged: false,
+      acknowledgedBy: null,
+      acknowledgedAt: null,
+    },
+  ]);
+
+  // 8. Seed Admin Permissions — George has scan+view_logs+send_messages; Elia has only scan+view_logs
+  console.log("Seeding admin permissions...");
+  await db.insert(adminPermissions).values([
+    { id: "perm-m-5-scan", memberId: "m-5", permission: "scan", grantedBy: "m-7", grantedAt: new Date("2023-02-01") },
+    { id: "perm-m-5-view_logs", memberId: "m-5", permission: "view_logs", grantedBy: "m-7", grantedAt: new Date("2023-02-01") },
+    { id: "perm-m-5-send_messages", memberId: "m-5", permission: "send_messages", grantedBy: "m-7", grantedAt: new Date("2023-02-01") },
+    { id: "perm-m-10-scan", memberId: "m-10", permission: "scan", grantedBy: "m-7", grantedAt: new Date("2024-01-10") },
+    { id: "perm-m-10-view_logs", memberId: "m-10", permission: "view_logs", grantedBy: "m-7", grantedAt: new Date("2024-01-10") },
+  ]);
+
+  // 9. Seed Activity Logs
   console.log("Seeding activity logs...");
   await db.insert(activityLogs).values([
-    {
-      id: "act-1",
-      textAr: "تم اعتماد ساندي ميلاد",
-      textEn: "Sandy Milad approved",
-      timeAr: "منذ ١٠ دقائق",
-      timeEn: "10m ago",
-    },
-    {
-      id: "act-2",
-      textAr: "تسجيل حضور ١٢ عضواً",
-      textEn: "12 members checked in",
-      timeAr: "منذ ساعة",
-      timeEn: "1h ago",
-    },
-    {
-      id: "act-3",
-      textAr: "طلب جديد من مايكل عاطف",
-      textEn: "New request from Michael Atef",
-      timeAr: "منذ ٣ ساعات",
-      timeEn: "3h ago",
-    },
+    { id: "act-1", textAr: "تم اعتماد ساندي ميلاد", textEn: "Sandy Milad approved", timeAr: "منذ ١٠ دقائق", timeEn: "10m ago" },
+    { id: "act-2", textAr: "تسجيل حضور ١٢ عضواً", textEn: "12 members checked in", timeAr: "منذ ساعة", timeEn: "1h ago" },
+    { id: "act-3", textAr: "طلب جديد من مايكل عاطف", textEn: "New request from Michael Atef", timeAr: "منذ ٣ ساعات", timeEn: "3h ago" },
   ]);
 
   console.log("Database seeded successfully!");
 }
 
 seed()
-  .then(() => {
-    pool.end();
-    process.exit(0);
-  })
-  .catch((err) => {
-    console.error("Seeding failed:", err);
-    pool.end();
-    process.exit(1);
-  });
+  .then(() => { pool.end(); process.exit(0); })
+  .catch((err) => { console.error("Seeding failed:", err); pool.end(); process.exit(1); });

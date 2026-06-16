@@ -164,7 +164,7 @@ export const api = {
     return { stats: { ...dashboardStats, pendingApprovals: members.filter((member) => member.status === "pending").length }, recentActivity };
   },
 
-  async recordAttendance(payloadText: string, scannedBy: User) {
+  async recordAttendance(payloadText: string, scannedBy: User, fridayCategory?: string) {
     await wait();
     try {
       const parsed = qrPayloadSchema.parse(JSON.parse(payloadText));
@@ -178,6 +178,7 @@ export const api = {
         date: { ar: "اليوم", en: "Today" },
         status: "on-time",
         scannedBy: scannedBy.name,
+        fridayCategory: fridayCategory || null,
       };
       attendanceLogs = [next, ...attendanceLogs];
       members = members.map((item) =>
@@ -194,5 +195,15 @@ export const api = {
   async updateProfilePhoto(user: User, photoUri: string): Promise<User> {
     await wait();
     return { ...user, photoUri };
+  },
+
+  async setNotifications(): Promise<import("@/types").SetNotification[]> {
+    await wait();
+    // Mock: return empty array since mock data layer has no set notifications
+    return [];
+  },
+
+  async acknowledgeSetNotification(id: string): Promise<void> {
+    await wait();
   },
 };

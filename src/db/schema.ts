@@ -1,4 +1,4 @@
-import { pgTable, varchar, text, boolean, serial } from "drizzle-orm/pg-core";
+import { pgTable, varchar, text, boolean, serial, integer, timestamp, unique } from "drizzle-orm/pg-core";
 
 export const members = pgTable("members", {
   id: varchar("id", { length: 50 }).primaryKey(),
@@ -14,6 +14,7 @@ export const members = pgTable("members", {
   registered: varchar("registered", { length: 50 }).notNull(),
   approvedBy: varchar("approved_by", { length: 255 }),
   photoUri: text("photo_uri"),
+  completedSets: integer("completed_sets").notNull().default(0),
 });
 
 export const attendanceLogs = pgTable("attendance_logs", {
@@ -24,6 +25,7 @@ export const attendanceLogs = pgTable("attendance_logs", {
   time: varchar("time", { length: 50 }).notNull(),
   status: varchar("status", { length: 50 }).notNull().default("on-time"), // on-time, late, absent
   scannedBy: varchar("scanned_by", { length: 255 }),
+  fridayCategory: varchar("friday_category", { length: 50 }), // contemporary_issues | bible_study | spirituality | saints_lives
 });
 
 export const verses = pgTable("verses", {
@@ -66,3 +68,22 @@ export const activityLogs = pgTable("activity_logs", {
   timeAr: varchar("time_ar", { length: 50 }).notNull(),
   timeEn: varchar("time_en", { length: 50 }).notNull(),
 });
+
+export const setNotifications = pgTable("set_notifications", {
+  id: varchar("id", { length: 50 }).primaryKey(),
+  memberId: varchar("member_id", { length: 50 }).notNull().references(() => members.id),
+  triggeredAt: timestamp("triggered_at").notNull().defaultNow(),
+  acknowledged: boolean("acknowledged").notNull().default(false),
+  acknowledgedBy: varchar("acknowledged_by", { length: 50 }).references(() => members.id),
+  acknowledgedAt: timestamp("acknowledged_at"),
+});
+
+export const adminPermissions = pgTable("admin_permissions", {
+  id: varchar("id", { length: 50 }).primaryKey(),
+  memberId: varchar("member_id", { length: 50 }).notNull().references(() => members.id),
+  permission: varchar("permission", { length: 50 }).notNull(), // scan | view_logs | send_messages | generate_reports
+  grantedBy: varchar("granted_by", { length: 50 }).notNull().references(() => members.id),
+  grantedAt: timestamp("granted_at").notNull().defaultNow(),
+}, (table) => ({
+  uniqueMemberPermission: unique().on(table.memberId, table.permission),
+}));
