@@ -1,27 +1,36 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Link } from "expo-router";
-import { ArrowRight, Lock, Phone, ShieldCheck, User, UserCog } from "lucide-react-native";
+import { ArrowRight, Lock, Phone } from "lucide-react-native";
+import { useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { AppScreen, AppText, Button, LanguageToggle, LogoMark, TextField } from "@/components/ui";
 import { useAuth } from "@/lib/auth";
 import { useLang } from "@/lib/i18n";
 import { loginSchema } from "@/lib/validation";
-import type { LoginInput, Role } from "@/types";
+import type { LoginInput } from "@/types";
 
 export default function SignInScreen() {
   const { t, lang } = useLang();
-  const { signIn, demoSignIn } = useAuth();
+  const { signIn } = useAuth();
+  const [error, setError] = useState<string | null>(null);
   const {
     control,
     handleSubmit,
     formState: { errors, isSubmitting },
   } = useForm<LoginInput>({
     resolver: zodResolver(loginSchema),
-    defaultValues: { phone: "+20 100 123 4567", password: "demo" },
+    defaultValues: { phone: "", password: "" },
   });
 
-  const onSubmit = handleSubmit((values) => signIn(values));
+  const onSubmit = handleSubmit(async (values) => {
+    setError(null);
+    try {
+      await signIn(values);
+    } catch (err: any) {
+      setError(err?.message ?? "Login failed");
+    }
+  });
 
   return (
     <AppScreen contentClassName="min-h-full justify-between pt-4">
@@ -74,6 +83,10 @@ export default function SignInScreen() {
             )}
           />
 
+          {error ? (
+            <Text className="text-center text-sm font-semibold text-destructive">{error}</Text>
+          ) : null}
+
           <Button onPress={onSubmit} disabled={isSubmitting}>
             {isSubmitting ? <ActivityIndicator color="#fffaf1" /> : null}
             <Text className="text-base font-extrabold text-primary-foreground">{t("signIn")}</Text>
@@ -86,43 +99,7 @@ export default function SignInScreen() {
             <Text className="text-sm font-extrabold text-primary">{t("newMember")}</Text>
           </Pressable>
         </Link>
-
-        <View className="my-5 flex-row items-center gap-3">
-          <View className="h-px flex-1 bg-border" />
-          <Text className="text-[11px] font-bold uppercase text-muted-foreground">{t("enterRole")}</Text>
-          <View className="h-px flex-1 bg-border" />
-        </View>
-
-        <View className="flex-row gap-2">
-          <RoleChip role="member" label={t("member")} icon={User} onPress={() => demoSignIn("member")} />
-          <RoleChip role="admin" label={t("admin")} icon={UserCog} onPress={() => demoSignIn("admin")} />
-          <RoleChip role="super-admin" label={t("superAdmin")} icon={ShieldCheck} onPress={() => demoSignIn("super-admin")} />
-        </View>
       </View>
     </AppScreen>
-  );
-}
-
-function RoleChip({
-  label,
-  icon: Icon,
-  onPress,
-}: {
-  role: Role;
-  label: string;
-  icon: typeof User;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}
-      className="flex-1 items-center gap-1.5 rounded-2xl border border-border bg-card px-2 py-3"
-    >
-      <Icon size={22} color="#6b1f1f" />
-      <Text numberOfLines={1} adjustsFontSizeToFit className="text-center text-[11px] font-extrabold text-foreground">
-        {label}
-      </Text>
-    </Pressable>
   );
 }

@@ -15,6 +15,10 @@ export const members = pgTable("members", {
   approvedBy: varchar("approved_by", { length: 255 }),
   photoUri: text("photo_uri"),
   completedSets: integer("completed_sets").notNull().default(0),
+  active: boolean("active").notNull().default(true), // false = deactivated admin/member
+  // Marks the start of the current Friday-set cycle. Only attendance logged at/after
+  // this timestamp counts toward the in-progress set. History is never deleted.
+  cycleStartAt: timestamp("cycle_start_at").notNull().defaultNow(),
 });
 
 export const attendanceLogs = pgTable("attendance_logs", {
@@ -26,6 +30,8 @@ export const attendanceLogs = pgTable("attendance_logs", {
   status: varchar("status", { length: 50 }).notNull().default("on-time"), // on-time, late, absent
   scannedBy: varchar("scanned_by", { length: 255 }),
   fridayCategory: varchar("friday_category", { length: 50 }), // contemporary_issues | bible_study | spirituality | saints_lives
+  scannedByAdminId: varchar("scanned_by_admin_id", { length: 50 }).references(() => members.id),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
 export const verses = pgTable("verses", {
@@ -67,16 +73,35 @@ export const activityLogs = pgTable("activity_logs", {
   textEn: varchar("text_en", { length: 255 }).notNull(),
   timeAr: varchar("time_ar", { length: 50 }).notNull(),
   timeEn: varchar("time_en", { length: 50 }).notNull(),
+  action: varchar("action", { length: 50 }), // attendance_scan | set_completed | reward_approved | admin_created | permissions_changed | message_sent | report_generated | admin_deactivated
+  actorId: varchar("actor_id", { length: 50 }), // who performed the action
+  targetId: varchar("target_id", { length: 50 }), // affected member, if any
+  createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
+// A completed Friday set awaiting / having received a reward. This is the
+// "member_sets" record from the spec: one row per completed set per member.
 export const setNotifications = pgTable("set_notifications", {
   id: varchar("id", { length: 50 }).primaryKey(),
   memberId: varchar("member_id", { length: 50 }).notNull().references(() => members.id),
+  setNumber: integer("set_number").notNull().default(1), // 1-based sequence per member
   triggeredAt: timestamp("triggered_at").notNull().defaultNow(),
+  // status: pending_reward -> rewarded. `acknowledged` mirrors status === "rewarded".
+  status: varchar("status", { length: 30 }).notNull().default("pending_reward"),
   acknowledged: boolean("acknowledged").notNull().default(false),
   acknowledgedBy: varchar("acknowledged_by", { length: 50 }).references(() => members.id),
   acknowledgedAt: timestamp("acknowledged_at"),
 });
+
+// Read receipts for notification-based messages (broadcast or targeted).
+export const messageReads = pgTable("message_reads", {
+  id: varchar("id", { length: 50 }).primaryKey(),
+  notificationId: varchar("notification_id", { length: 50 }).notNull().references(() => notifications.id),
+  memberId: varchar("member_id", { length: 50 }).notNull().references(() => members.id),
+  readAt: timestamp("read_at").notNull().defaultNow(),
+}, (table) => ({
+  uniqueRead: unique().on(table.notificationId, table.memberId),
+}));
 
 export const adminPermissions = pgTable("admin_permissions", {
   id: varchar("id", { length: 50 }).primaryKey(),

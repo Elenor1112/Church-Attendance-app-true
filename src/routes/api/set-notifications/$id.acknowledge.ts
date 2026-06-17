@@ -1,9 +1,11 @@
 import { createAPIFileRoute } from "@tanstack/react-start/api";
-import { db } from "../../../db";
-import { setNotifications, members } from "../../../db/schema";
-import { eq, sql } from "drizzle-orm";
 import { verifyToken } from "../../../lib/auth-server";
+import { approveReward } from "../../../lib/sets";
 
+// PATCH /api/set-notifications/:id/acknowledge
+// Admin marks a completed Friday set as "reward given". This rewards the set,
+// records the approving admin + timestamp, increments lifetime completedSets,
+// and resets the member's cycle so they start collecting the next set.
 export const Route = createAPIFileRoute("/api/set-notifications/$id/acknowledge")({
   PATCH: async ({ request, params }) => {
     try {
@@ -15,55 +17,26 @@ export const Route = createAPIFileRoute("/api/set-notifications/$id/acknowledge"
         });
       }
 
-      const { id } = params;
+      const result = await approveReward(params.id, tokenUser.id, tokenUser.name);
 
-      const existing = await db.query.setNotifications.findFirst({
-        where: eq(setNotifications.id, id),
-      });
-
-      if (!existing) {
-        return new Response(JSON.stringify({ error: "Set notification not found", code: "NOT_FOUND" }), {
-          status: 404,
+      if ("error" in result) {
+        const status = result.error === "ALREADY_REWARDED" ? 400 : 404;
+        return new Response(JSON.stringify({ error: result.error, code: result.error }), {
+          status,
           headers: { "Content-Type": "application/json" },
         });
       }
 
-      if (existing.acknowledged) {
-        return new Response(
-          JSON.stringify({ error: "Already acknowledged", code: "ALREADY_ACKNOWLEDGED" }),
-          { status: 400, headers: { "Content-Type": "application/json" } },
-        );
-      }
-
-      const now = new Date();
-      await db
-        .update(setNotifications)
-        .set({
-          acknowledged: true,
-          acknowledgedBy: tokenUser.id,
-          acknowledgedAt: now,
-        })
-        .where(eq(setNotifications.id, id));
-
-      // Increment completed_sets for the member
-      await db
-        .update(members)
-        .set({ completedSets: sql`${members.completedSets} + 1` })
-        .where(eq(members.id, existing.memberId));
-
-      const updatedMember = await db.query.members.findFirst({
-        where: eq(members.id, existing.memberId),
-      });
-
       return new Response(
         JSON.stringify({
-          id: existing.id,
-          memberId: existing.memberId,
-          memberName: updatedMember ? { ar: updatedMember.nameAr, en: updatedMember.nameEn } : null,
-          completedSets: updatedMember?.completedSets ?? 0,
+          id: params.id,
+          memberId: result.member.id,
+          memberName: result.member.name,
+          completedSets: result.member.completedSets,
+          setNumber: result.setNumber,
+          status: "rewarded",
           acknowledged: true,
           acknowledgedBy: tokenUser.id,
-          acknowledgedAt: now,
         }),
         { status: 200, headers: { "Content-Type": "application/json" } },
       );

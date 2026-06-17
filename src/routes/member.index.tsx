@@ -16,6 +16,7 @@ function MemberHome() {
   const navigate = useNavigate();
   const session = getSession();
   const [homeData, setHomeData] = useState<any>(null);
+  const [progress, setProgress] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -33,6 +34,9 @@ function MemberHome() {
         }
         const data = await res.json();
         setHomeData(data);
+
+        const progRes = await authenticatedFetch("/api/member/progress");
+        if (progRes.ok) setProgress(await progRes.json());
       } catch (err) {
         console.error("Failed to load home data", err);
       } finally {
@@ -131,6 +135,43 @@ function MemberHome() {
           sub={lang === "ar" ? "غير مقروءة" : "unread"}
         />
       </div>
+
+      {/* Friday Set Progress */}
+      {progress && (
+        <section className="mt-5 rounded-3xl bg-card p-5 shadow-card">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-bold text-foreground">
+              {lang === "ar" ? "تقدم مجموعة الجمعة" : "Friday Set Progress"}
+            </h3>
+            <span className="text-xs font-bold text-gold-foreground">
+              🏆 {lang === "ar" ? "المجموعات المكتملة" : "Completed sets"}: {progress.completedSets}
+            </span>
+          </div>
+          <p className="mt-1 text-sm font-semibold text-muted-foreground">
+            {progress.completedInCycle} / {progress.total}
+          </p>
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            {progress.categories.map((c: any) => (
+              <div
+                key={c.category}
+                className={`flex items-center justify-between rounded-xl px-3 py-2 text-xs font-semibold ${
+                  c.done
+                    ? "bg-[color-mix(in_oklab,var(--color-success)_14%,transparent)] text-success"
+                    : "bg-secondary text-muted-foreground"
+                }`}
+              >
+                <span>{c.label[lang]}</span>
+                <span>{c.done ? "✅" : "❌"}</span>
+              </div>
+            ))}
+          </div>
+          {progress.pendingReward && (
+            <p className="mt-3 rounded-xl bg-gold-soft px-3 py-2 text-xs font-semibold text-gold-foreground">
+              🎁 {lang === "ar" ? "مجموعة مكتملة بانتظار المكافأة" : "Set complete — reward pending"}
+            </p>
+          )}
+        </section>
+      )}
 
       <Link
         to="/member/qr"

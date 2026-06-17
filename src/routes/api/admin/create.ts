@@ -4,6 +4,7 @@ import { members, adminPermissions } from "../../../db/schema";
 import { eq } from "drizzle-orm";
 import { verifyToken, hashPassword } from "../../../lib/auth-server";
 import type { Permission } from "../../../lib/permissions";
+import { writeActivityLog } from "../../../lib/audit";
 
 const VALID_PERMISSIONS: Permission[] = ["scan", "view_logs", "send_messages", "generate_reports"];
 
@@ -71,6 +72,14 @@ export const Route = createAPIFileRoute("/api/admin/create")({
           })),
         );
       }
+
+      await writeActivityLog({
+        action: "admin_created",
+        textAr: `${tokenUser.name.ar} أنشأ مشرفًا جديدًا: ${nameAr}`,
+        textEn: `${tokenUser.name.en} created a new admin: ${nameEn}`,
+        actorId: tokenUser.id,
+        targetId: memberId,
+      });
 
       const created = await db.query.members.findFirst({ where: eq(members.id, memberId) });
       const createdPerms = await db.query.adminPermissions.findMany({

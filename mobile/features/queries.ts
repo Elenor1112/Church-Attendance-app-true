@@ -7,6 +7,10 @@ export function useMemberHomeQuery() {
   return useQuery({ queryKey: queryKeys.memberHome, queryFn: api.memberHome });
 }
 
+export function useSetProgressQuery() {
+  return useQuery({ queryKey: ["setProgress"], queryFn: () => api.setProgress() });
+}
+
 export function useNotificationsQuery() {
   return useQuery({ queryKey: queryKeys.notifications, queryFn: api.notifications });
 }
@@ -83,6 +87,8 @@ export function useRecordAttendanceMutation() {
       client.invalidateQueries({ queryKey: ["attendanceLogs"] });
       client.invalidateQueries({ queryKey: queryKeys.dashboard });
       client.invalidateQueries({ queryKey: ["members"] });
+      client.invalidateQueries({ queryKey: ["setProgress"] });
+      client.invalidateQueries({ queryKey: ["setNotifications"] });
     },
   });
 }

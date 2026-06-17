@@ -1,83 +1,11 @@
 import { createAPIFileRoute } from "@tanstack/react-start/api";
 import { db } from "../../../db";
-import { attendanceLogs, members, notifications, setNotifications } from "../../../db/schema";
-import { eq, and, inArray } from "drizzle-orm";
+import { attendanceLogs, members } from "../../../db/schema";
+import { eq } from "drizzle-orm";
 import { verifyToken } from "../../../lib/auth-server";
 import { requirePermission } from "../../../lib/permissions";
-
-const VALID_FRIDAY_CATEGORIES = ["contemporary_issues", "bible_study", "spirituality", "saints_lives"] as const;
-type FridayCategory = (typeof VALID_FRIDAY_CATEGORIES)[number];
-
-async function checkAndCreateSetNotification(memberId: string, member: { nameAr: string; nameEn: string }) {
-  // Find last acknowledged set notification for this member (or null if none)
-  const lastAcknowledged = await db.query.setNotifications.findFirst({
-    where: and(
-      eq(setNotifications.memberId, memberId),
-      eq(setNotifications.acknowledged, true),
-    ),
-    orderBy: (sn, { desc }) => [desc(sn.acknowledgedAt)],
-  });
-
-  // Check if there's already an unacknowledged set notification (max 1 pending)
-  const pendingNotification = await db.query.setNotifications.findFirst({
-    where: and(
-      eq(setNotifications.memberId, memberId),
-      eq(setNotifications.acknowledged, false),
-    ),
-  });
-  if (pendingNotification) return;
-
-  // Gather all attendance logs since last acknowledgment
-  const allLogs = await db.query.attendanceLogs.findMany({
-    where: eq(attendanceLogs.memberId, memberId),
-  });
-
-  // Use all logs with a friday category (since last acknowledgment if any)
-  // The log ID format scan-{timestamp} lets us derive creation time for new logs;
-  // for seeded logs with non-numeric IDs we include them all (safe for fresh installs)
-  const cutoffMs = lastAcknowledged?.acknowledgedAt?.getTime() ?? 0;
-  const recentLogs = allLogs.filter((l) => {
-    if (!l.fridayCategory) return false;
-    const numericPart = l.id.replace("scan-", "");
-    const ts = Number(numericPart);
-    if (isNaN(ts)) return true; // seeded / non-numeric IDs always included
-    return ts > cutoffMs;
-  });
-
-  const categoriesPresent = new Set(recentLogs.map((l) => l.fridayCategory).filter(Boolean));
-  const allFour = VALID_FRIDAY_CATEGORIES.every((c) => categoriesPresent.has(c));
-  if (!allFour) return;
-
-  // Create the set notification record
-  const setNotifId = `sn-${Date.now()}`;
-  await db.insert(setNotifications).values({
-    id: setNotifId,
-    memberId,
-    acknowledged: false,
-  });
-
-  // Notify all admins and super-admins
-  const admins = await db.query.members.findMany({
-    where: and(
-      eq(members.status, "approved"),
-      inArray(members.role, ["admin", "super-admin"]),
-    ),
-  });
-
-  for (const admin of admins) {
-    await db.insert(notifications).values({
-      id: `n-set-${setNotifId}-${admin.id}`,
-      titleAr: `🎁 إتمام مجموعة الجمعة`,
-      titleEn: `🎁 Friday Set Completed`,
-      bodyAr: `${member.nameAr} أكمل مجموعة الجمعة الكاملة! (رمز الإشعار: ${setNotifId})`,
-      bodyEn: `${member.nameEn} has completed a full Friday set! (ref: ${setNotifId})`,
-      timeAr: "الآن",
-      timeEn: "Now",
-      unread: true,
-      userId: admin.id,
-    });
-  }
-}
+import { isFridayCategory, detectAndCreateSet, FRIDAY_CATEGORIES } from "../../../lib/sets";
+import { writeActivityLog } from "../../../lib/audit";
 
 export const Route = createAPIFileRoute("/api/attendance")({
   GET: async ({ request }) => {
@@ -172,11 +100,11 @@ export const Route = createAPIFileRoute("/api/attendance")({
         });
       }
 
-      // Validate fridayCategory if provided
-      if (fridayCategory && !VALID_FRIDAY_CATEGORIES.includes(fridayCategory as FridayCategory)) {
+      // A Friday category is mandatory: the scanner must select one before recording.
+      if (!fridayCategory || !isFridayCategory(fridayCategory)) {
         return new Response(
           JSON.stringify({
-            error: "Invalid friday category. Must be one of: contemporary_issues, bible_study, spirituality, saints_lives",
+            error: `A Friday category is required. Must be one of: ${FRIDAY_CATEGORIES.join(", ")}`,
             code: "INVALID_CATEGORY",
           }),
           { status: 400, headers: { "Content-Type": "application/json" } },
@@ -230,13 +158,27 @@ export const Route = createAPIFileRoute("/api/attendance")({
         time: timeStr,
         status: "on-time",
         scannedBy: tokenUser.name.en,
-        fridayCategory: fridayCategory || null,
+        scannedByAdminId: tokenUser.id,
+        fridayCategory,
+        createdAt: now,
       });
 
-      // Run set-completion check asynchronously (don't block response)
-      if (fridayCategory) {
-        checkAndCreateSetNotification(member.id, { nameAr: member.nameAr, nameEn: member.nameEn }).catch(() => {});
-      }
+      await writeActivityLog({
+        action: "attendance_scan",
+        textAr: `تم تسجيل حضور ${member.nameAr}`,
+        textEn: `Recorded attendance for ${member.nameEn}`,
+        actorId: tokenUser.id,
+        targetId: member.id,
+      });
+
+      // Detect set completion (creates pending set + notifies admins). Awaited so
+      // the response can report whether a set was just completed.
+      const setId = await detectAndCreateSet({
+        id: member.id,
+        nameAr: member.nameAr,
+        nameEn: member.nameEn,
+        phone: member.phone,
+      }).catch(() => null);
 
       return new Response(
         JSON.stringify({
@@ -247,7 +189,8 @@ export const Route = createAPIFileRoute("/api/attendance")({
           date: { ar: "اليوم", en: "Today" },
           status: "on-time",
           scannedBy: tokenUser.name.en,
-          fridayCategory: fridayCategory || null,
+          fridayCategory,
+          setCompleted: Boolean(setId),
         }),
         { status: 201, headers: { "Content-Type": "application/json" } },
       );

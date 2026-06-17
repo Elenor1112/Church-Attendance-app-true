@@ -1,6 +1,6 @@
 import { router } from "expo-router";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { api } from "@/lib/api";
+import { api, setAuthToken } from "@/lib/api";
 import { clearSession, loadSession, saveSession } from "@/lib/storage";
 import type { LoginInput, Role, Session, User } from "@/types";
 
@@ -9,7 +9,6 @@ type AuthState = {
   user: User | null;
   isLoading: boolean;
   signIn: (input: LoginInput) => Promise<void>;
-  demoSignIn: (role: Role) => Promise<void>;
   signOut: () => Promise<void>;
   updateUser: (user: User) => Promise<void>;
 };
@@ -24,11 +23,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     loadSession()
-      .then((stored) => setSession(stored))
+      .then((stored) => {
+        setAuthToken(stored?.accessToken ?? null);
+        setSession(stored);
+      })
       .finally(() => setLoading(false));
   }, []);
 
   const persist = useCallback(async (next: Session) => {
+    setAuthToken(next.accessToken);
     setSession(next);
     await saveSession(next);
   }, []);
@@ -42,9 +45,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [persist],
   );
 
-  const demoSignIn = useCallback((role: Role) => signIn({ phone: "", password: "demo", role }), [signIn]);
-
   const signOut = useCallback(async () => {
+    setAuthToken(null);
     setSession(null);
     await clearSession();
     router.replace("/");
@@ -59,8 +61,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const value = useMemo(
-    () => ({ session, user: session?.user ?? null, isLoading, signIn, demoSignIn, signOut, updateUser }),
-    [demoSignIn, isLoading, session, signIn, signOut, updateUser],
+    () => ({ session, user: session?.user ?? null, isLoading, signIn, signOut, updateUser }),
+    [isLoading, session, signIn, signOut, updateUser],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

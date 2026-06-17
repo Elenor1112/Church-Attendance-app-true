@@ -1,7 +1,7 @@
 import { createFileRoute, Outlet, useNavigate } from "@tanstack/react-router";
 import { BottomNav, type NavItem } from "@/components/bottom-nav";
 import { useLang } from "@/lib/i18n";
-import { ScanLine, ClipboardList, MessageSquareText, Users, User } from "lucide-react";
+import { ScanLine, ClipboardList, MessageSquareText, Users, User, BarChart3 } from "lucide-react";
 import { getSession } from "@/lib/auth-client";
 import { useEffect, useState } from "react";
 
@@ -46,6 +46,7 @@ function AdminLayout() {
     { to: "/admin", label: t("scanner"), icon: ScanLine, permission: "scan" },
     { to: "/admin/logs", label: t("attendanceLog"), icon: ClipboardList, permission: "view_logs" },
     { to: "/admin/comms", label: t("comms"), icon: MessageSquareText, permission: "send_messages" },
+    { to: "/admin/reports", label: t("reports" as any), icon: BarChart3, permission: "generate_reports" },
     { to: "/admin/members", label: t("members"), icon: Users },
     { to: "/admin/profile", label: t("profile"), icon: User },
   ];

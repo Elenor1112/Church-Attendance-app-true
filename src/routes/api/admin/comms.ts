@@ -1,9 +1,10 @@
 import { createAPIFileRoute } from "@tanstack/react-start/api";
 import { db } from "../../../db";
-import { members, notifications, attendanceLogs } from "../../../db/schema";
-import { eq, isNull, or } from "drizzle-orm";
+import { members, notifications, attendanceLogs, messageReads } from "../../../db/schema";
+import { eq, isNull, or, inArray } from "drizzle-orm";
 import { verifyToken } from "../../../lib/auth-server";
 import { requirePermission } from "../../../lib/permissions";
+import { writeActivityLog } from "../../../lib/audit";
 
 export const Route = createAPIFileRoute("/api/admin/comms")({
   GET: async ({ request }) => {
@@ -59,14 +60,20 @@ export const Route = createAPIFileRoute("/api/admin/comms")({
       upcomingBdays.sort((a, b) => a.days - b.days);
 
       const announcements = await db.select().from(notifications).where(isNull(notifications.userId));
-      const receipts = announcements.map(ann => {
-        return {
-          id: ann.id,
-          title: { ar: ann.titleAr, en: ann.titleEn },
-          delivered: allApproved.length,
-          read: Math.floor(allApproved.length * 0.7),
-        };
-      });
+      const announcementIds = announcements.map(a => a.id);
+      const reads = announcementIds.length
+        ? await db.select().from(messageReads).where(inArray(messageReads.notificationId, announcementIds))
+        : [];
+      const readCountByNotification = new Map<string, number>();
+      for (const r of reads) {
+        readCountByNotification.set(r.notificationId, (readCountByNotification.get(r.notificationId) ?? 0) + 1);
+      }
+      const receipts = announcements.map(ann => ({
+        id: ann.id,
+        title: { ar: ann.titleAr, en: ann.titleEn },
+        delivered: allApproved.length,
+        read: readCountByNotification.get(ann.id) ?? 0,
+      }));
 
       const todayLogs = await db.select().from(attendanceLogs).where(
         or(eq(attendanceLogs.dateEn, "Today"), eq(attendanceLogs.dateAr, "اليوم"))
@@ -167,8 +174,19 @@ export const Route = createAPIFileRoute("/api/admin/comms")({
         }
       }
 
+      const isBroadcast = recipientIds.length === 0 || (recipientIds.length === 1 && recipientIds[0] === "all");
+      const recipientCount = isBroadcast
+        ? (await db.select().from(members).where(eq(members.status, "approved"))).length
+        : recipientIds.length;
+      await writeActivityLog({
+        action: "message_sent",
+        textAr: `${tokenUser.name.ar} أرسل رسالة (${finalTitleAr}) إلى ${isBroadcast ? "الجميع" : `${recipientIds.length} عضو`}`,
+        textEn: `${tokenUser.name.en} sent a message (${finalTitleEn}) to ${isBroadcast ? "all members" : `${recipientIds.length} recipient(s)`}`,
+        actorId: tokenUser.id,
+      });
+
       return new Response(
-        JSON.stringify({ delivered: recipientIds.length || 1 }),
+        JSON.stringify({ delivered: recipientCount }),
         {
           status: 201,
           headers: { "Content-Type": "application/json" },

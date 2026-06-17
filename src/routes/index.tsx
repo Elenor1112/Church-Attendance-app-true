@@ -5,9 +5,9 @@ import { useLang } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Phone, Lock, ArrowRight, UserCog, ShieldCheck, User } from "lucide-react";
+import { Phone, Lock, ArrowRight } from "lucide-react";
 import { useState, type FormEvent } from "react";
-import { saveSession } from "@/lib/auth-client";
+import { saveSession, clearSession } from "@/lib/auth-client";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -22,19 +22,20 @@ export const Route = createFileRoute("/")({
 function SignIn() {
   const { t, lang } = useLang();
   const navigate = useNavigate();
-  const [phone, setPhone] = useState("+20 100 123 4567");
-  const [password, setPassword] = useState("demo");
+  const [phone, setPhone] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const handleLogin = async (phoneVal: string, passwordVal: string, roleHint?: string) => {
+  const handleLogin = async (phoneVal: string, passwordVal: string) => {
     setError(null);
     setLoading(true);
+    clearSession();
     try {
       const response = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone: phoneVal, password: passwordVal, role: roleHint }),
+        body: JSON.stringify({ phone: phoneVal, password: passwordVal }),
       });
 
       const data = await response.json();
@@ -149,36 +150,6 @@ function SignIn() {
         >
           {t("newMember")}
         </Link>
-
-        <div className="my-6 flex items-center gap-3">
-          <div className="h-px flex-1 bg-border" />
-          <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{t("enterRole")}</span>
-          <div className="h-px flex-1 bg-border" />
-        </div>
-
-        <div className="grid grid-cols-3 gap-2">
-          <button
-            onClick={() => handleLogin("", "demo", "member")}
-            className="flex flex-col items-center gap-1.5 rounded-2xl border border-border bg-card px-2 py-3 text-center text-[11px] font-semibold text-foreground transition hover:border-primary/40 hover:bg-primary-soft"
-          >
-            <User className="h-5 w-5 text-primary" />
-            <span>{t("member")}</span>
-          </button>
-          <button
-            onClick={() => handleLogin("", "demo", "admin")}
-            className="flex flex-col items-center gap-1.5 rounded-2xl border border-border bg-card px-2 py-3 text-center text-[11px] font-semibold text-foreground transition hover:border-primary/40 hover:bg-primary-soft"
-          >
-            <UserCog className="h-5 w-5 text-primary" />
-            <span>{t("admin")}</span>
-          </button>
-          <button
-            onClick={() => handleLogin("", "demo", "super-admin")}
-            className="flex flex-col items-center gap-1.5 rounded-2xl border border-border bg-card px-2 py-3 text-center text-[11px] font-semibold text-foreground transition hover:border-primary/40 hover:bg-primary-soft"
-          >
-            <ShieldCheck className="h-5 w-5 text-primary" />
-            <span>{t("superAdmin")}</span>
-          </button>
-        </div>
       </main>
     </div>
   );

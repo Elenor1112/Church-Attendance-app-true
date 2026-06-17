@@ -26,6 +26,7 @@ import { Route as AdminProfileRouteImport } from './routes/admin.profile'
 import { Route as AdminMembersRouteImport } from './routes/admin.members'
 import { Route as AdminLogsRouteImport } from './routes/admin.logs'
 import { Route as AdminCommsRouteImport } from './routes/admin.comms'
+import { Route as AdminReportsRouteImport } from './routes/admin.reports'
 
 const SuperRoute = SuperRouteImport.update({
   id: '/super',
@@ -110,6 +111,11 @@ const AdminLogsRoute = AdminLogsRouteImport.update({
 const AdminCommsRoute = AdminCommsRouteImport.update({
   id: '/comms',
   path: '/comms',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminReportsRoute = AdminReportsRouteImport.update({
+  id: '/reports',
+  path: '/reports',
   getParentRoute: () => AdminRoute,
 } as any)
 
@@ -359,6 +365,7 @@ declare module '@tanstack/react-router' {
 
 interface AdminRouteChildren {
   AdminCommsRoute: typeof AdminCommsRoute
+  AdminReportsRoute: typeof AdminReportsRoute
   AdminLogsRoute: typeof AdminLogsRoute
   AdminMembersRoute: typeof AdminMembersRoute
   AdminProfileRoute: typeof AdminProfileRoute
@@ -367,6 +374,7 @@ interface AdminRouteChildren {
 
 const AdminRouteChildren: AdminRouteChildren = {
   AdminCommsRoute: AdminCommsRoute,
+  AdminReportsRoute: AdminReportsRoute,
   AdminLogsRoute: AdminLogsRoute,
   AdminMembersRoute: AdminMembersRoute,
   AdminProfileRoute: AdminProfileRoute,

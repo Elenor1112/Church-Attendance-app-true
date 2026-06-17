@@ -15,6 +15,13 @@
       "when": 1781600000000,
       "tag": "0001_friday_categories_and_permissions",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1781686775039,
+      "tag": "0002_set_rewards_message_reads_audit",
+      "breakpoints": true
     }
   ]
 }

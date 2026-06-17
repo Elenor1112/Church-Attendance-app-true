@@ -20,9 +20,11 @@
     "android": {
       "package": "com.church.attendance",
       "permissions": [
-        "CAMERA",
-        "READ_MEDIA_IMAGES",
-        "POST_NOTIFICATIONS"
+        "android.permission.CAMERA",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
       ],
       "adaptiveIcon": {
         "backgroundColor": "#6b1f1f"
@@ -62,6 +64,13 @@
     },
     "web": {
       "bundler": "metro"
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "cf4bb018-1f15-4702-b162-f599e2863a41"
+      },
+      "apiUrl": "http://localhost:3000"
     }
   }
 }

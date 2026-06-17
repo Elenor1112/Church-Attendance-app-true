@@ -2,7 +2,7 @@ import { Link } from "expo-router";
 import { Bell, BookOpen, CalendarDays, CheckCircle2, ChevronRight, Clock, MapPin, Megaphone, QrCode } from "lucide-react-native";
 import { RefreshControl, Text, View } from "react-native";
 import { AppScreen, AppText, Avatar, Card, ErrorState, GradientCard, LanguageToggle, LoadingState, OfflineBanner, StatusPill } from "@/components/ui";
-import { useMemberHomeQuery } from "@/features/queries";
+import { useMemberHomeQuery, useSetProgressQuery } from "@/features/queries";
 import { useAuth } from "@/lib/auth";
 import { useOnlineStatus } from "@/lib/hooks";
 import { useLang } from "@/lib/i18n";
@@ -11,6 +11,7 @@ export default function MemberHome() {
   const { t, lang } = useLang();
   const { user } = useAuth();
   const query = useMemberHomeQuery();
+  const progressQuery = useSetProgressQuery();
   const online = useOnlineStatus();
 
   if (query.isLoading) return <LoadingState label={t("loading")} />;
@@ -76,25 +77,26 @@ export default function MemberHome() {
         <View className="flex-row items-center justify-between">
           <AppText className="text-sm font-extrabold">{t("currentSetProgress" as any)}</AppText>
           <Text className="text-xs font-extrabold text-gold-foreground">
-            🏆 {t("completedSets" as any)}: {user?.completedSets ?? 0}
+            🏆 {t("completedSets" as any)}: {progressQuery.data?.completedSets ?? user?.completedSets ?? 0}
           </Text>
         </View>
+        <Text className="mt-1 text-xs text-muted-foreground">
+          {progressQuery.data
+            ? `${progressQuery.data.completedInCycle} / ${progressQuery.data.total}`
+            : "—"}
+        </Text>
         <View className="mt-3 flex-row gap-2">
           {(["💬", "📖", "🕊️", "✨"] as const).map((emoji, i) => {
-            const labels = [
-              { ar: "قضايا معاصرة", en: "Contemporary Issues" },
-              { ar: "كتاب مقدس", en: "Bible Study" },
-              { ar: "روحانيات", en: "Spirituality" },
-              { ar: "سير قديسين", en: "Lives of Saints" },
-            ];
-            const done = false; // Progress tracked server-side; show neutral state in mock
+            const cat = progressQuery.data?.categories[i];
+            const done = cat?.done ?? false;
+            const label = cat?.label ?? { ar: "", en: "" };
             return (
               <View
                 key={i}
                 className={`flex-1 items-center rounded-xl py-2 ${done ? "bg-success-soft" : "bg-secondary"}`}
               >
-                <Text className="text-base">{emoji}</Text>
-                <Text className="mt-1 text-center text-[9px] text-muted-foreground">{labels[i][lang]}</Text>
+                <Text className="text-base">{done ? "✅" : emoji}</Text>
+                <Text className="mt-1 text-center text-[9px] text-muted-foreground">{label[lang]}</Text>
               </View>
             );
           })}

@@ -60,6 +60,20 @@ function MembersCenter() {
 
   useEffect(() => { loadMembers(); }, [role, status, search]);
 
+  const toggleActive = async (m: any) => {
+    const action = m.active === false ? "reactivate" : "deactivate";
+    try {
+      const res = await authenticatedFetch("/api/admin/members", {
+        method: "POST",
+        body: JSON.stringify({ action, id: m.id }),
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setMembers((prev) => prev.map((x) => (x.id === m.id ? { ...x, active: updated.active } : x)));
+      }
+    } catch {}
+  };
+
   const filtered = members.filter((m) => {
     const r = roleMatch[role];
     const okRole = r === "*" || m.role === r;
@@ -160,12 +174,27 @@ function MembersCenter() {
                               ))
                             )}
                           </div>
-                          <button
-                            onClick={() => setEditPermsMember(m)}
-                            className="mt-2 flex items-center gap-1 rounded-xl bg-secondary px-3 py-1.5 text-[11px] font-semibold text-foreground"
-                          >
-                            <UserCog className="h-3 w-3" /> {t("editPermissions")}
-                          </button>
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            <button
+                              onClick={() => setEditPermsMember(m)}
+                              className="flex items-center gap-1 rounded-xl bg-secondary px-3 py-1.5 text-[11px] font-semibold text-foreground"
+                            >
+                              <UserCog className="h-3 w-3" /> {t("editPermissions")}
+                            </button>
+                            <button
+                              onClick={() => toggleActive(m)}
+                              className={`flex items-center gap-1 rounded-xl px-3 py-1.5 text-[11px] font-semibold ${
+                                m.active === false
+                                  ? "bg-[color-mix(in_oklab,var(--color-success)_14%,transparent)] text-success"
+                                  : "bg-[color-mix(in_oklab,var(--color-destructive)_12%,transparent)] text-destructive"
+                              }`}
+                            >
+                              {m.active === false ? t("reactivate" as any) : t("deactivate" as any)}
+                            </button>
+                          </div>
+                          {m.active === false && (
+                            <p className="mt-1 text-[10px] font-semibold text-destructive">{t("deactivated" as any)}</p>
+                          )}
                         </div>
                       )}
                     </dl>

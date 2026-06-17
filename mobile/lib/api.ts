@@ -1,17 +1,4 @@
-import {
-  absences,
-  attendanceLogs as seedAttendance,
-  birthdays,
-  dashboardStats,
-  demoUsers,
-  meeting,
-  memberNotifications as seedNotifications,
-  members as seedMembers,
-  receipts,
-  recentActivity,
-  verse,
-} from "@/data/mock";
-import { qrPayloadSchema } from "@/lib/validation";
+import { API_URL } from "@/lib/config";
 import type {
   AttendanceLog,
   LoginInput,
@@ -23,187 +10,201 @@ import type {
   Role,
   SendAlertInput,
   Session,
+  SetNotification,
   User,
 } from "@/types";
 
-let notifications: NotificationItem[] = [...seedNotifications];
-let members: MemberRecord[] = [...seedMembers];
-let attendanceLogs: AttendanceLog[] = [...seedAttendance];
+// ---------------------------------------------------------------------------
+// Real HTTP API client. Talks to the TanStack Start backend (see API_URL).
+// The access token is held in module scope and injected by the auth provider
+// via setAuthToken() so every authenticated request carries the Bearer token.
+// ---------------------------------------------------------------------------
 
-const wait = (ms = 260) => new Promise((resolve) => setTimeout(resolve, ms));
-const tokenFor = (user: User) => `jwt.demo.${user.role}.${user.id}.${Date.now()}`;
+let authToken: string | null = null;
 
-function normalizeRole(role?: Role): Role {
-  return role ?? "member";
+export function setAuthToken(token: string | null) {
+  authToken = token;
 }
+
+type RequestOptions = {
+  method?: string;
+  body?: unknown;
+  auth?: boolean;
+};
+
+async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
+  const { method = "GET", body, auth = true } = opts;
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (auth && authToken) headers.Authorization = `Bearer ${authToken}`;
+
+  const res = await fetch(`${API_URL}${path}`, {
+    method,
+    headers,
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
+
+  const text = await res.text();
+  const data = text ? JSON.parse(text) : null;
+
+  if (!res.ok) {
+    throw new Error(data?.error || `Request failed (${res.status})`);
+  }
+  return data as T;
+}
+
+export type SetProgressResponse = {
+  categories: { category: string; label: { ar: string; en: string }; done: boolean }[];
+  completedInCycle: number;
+  total: number;
+  completedSets: number;
+  pendingReward: boolean;
+};
 
 export const api = {
   async login(input: LoginInput): Promise<Session> {
-    await wait();
-    const role = normalizeRole(input.role);
-    const user = demoUsers[role];
-    if (!user) {
-      throw new Error(`Demo user not found for role: ${role}`);
-    }
-    return {
-      accessToken: tokenFor(user),
-      refreshToken: `refresh.demo.${user.id}`,
-      user,
-    };
+    return request<Session>("/api/auth/login", {
+      method: "POST",
+      auth: false,
+      body: { phone: input.phone, password: input.password },
+    });
   },
 
   async register(input: RegisterInput): Promise<{ ok: true }> {
-    await wait();
-    const next: MemberRecord = {
-      id: `m-${Date.now()}`,
-      name: { ar: `${input.firstName} ${input.lastName}`, en: `${input.firstName} ${input.lastName}` },
-      initials: `${input.firstName[0] ?? ""}${input.lastName[0] ?? ""}`.toUpperCase(),
-      phone: input.phone,
-      email: input.email || undefined,
-      birthday: input.birthday,
-      spousePhone: input.spousePhone,
-      role: "member",
-      status: "pending",
-      registered: new Date().toISOString().slice(0, 10),
-      approvedBy: null,
-      lastAttendance: null,
-      scannedBy: null,
-      attendanceHistory: [],
-    };
-    members = [next, ...members];
+    await request("/api/auth/register", {
+      method: "POST",
+      auth: false,
+      body: {
+        firstName: input.firstName,
+        lastName: input.lastName,
+        phone: input.phone,
+        password: input.password,
+        email: input.email || undefined,
+        birthday: input.birthday,
+        spousePhone: input.spousePhone || undefined,
+      },
+    });
     return { ok: true };
   },
 
   async me(session: Session): Promise<User> {
-    await wait(120);
-    return session.user;
+    return request<User>("/api/auth/me");
   },
 
   async memberHome() {
-    await wait();
-    return { verse, meeting, visitsThisMonth: 12, unreadAnnouncements: notifications.filter((item) => item.unread).length };
+    return request<{
+      verse: { ar: string; en: string; ref: { ar: string; en: string } };
+      meeting: {
+        title: { ar: string; en: string };
+        date: { ar: string; en: string };
+        time: { ar: string; en: string };
+        location: { ar: string; en: string };
+      };
+      visitsThisMonth: number;
+      unreadAnnouncements: number;
+    }>("/api/member/home");
   },
 
-  async notifications() {
-    await wait();
-    return notifications;
+  async setProgress(memberId?: string): Promise<SetProgressResponse> {
+    const qs = memberId ? `?memberId=${encodeURIComponent(memberId)}` : "";
+    return request<SetProgressResponse>(`/api/member/progress${qs}`);
   },
 
-  async clearNotifications() {
-    await wait();
-    notifications = [];
-    return notifications;
+  async notifications(): Promise<NotificationItem[]> {
+    return request<NotificationItem[]>("/api/notifications");
   },
 
-  async attendanceLogs(filter: "today" | "thisWeek" | "all", search = "") {
-    await wait();
-    const normalized = search.trim().toLowerCase();
-    return attendanceLogs.filter((log) => {
-      const filterOk = filter === "all" || (filter === "today" ? log.date.en === "Today" : true);
-      const searchOk = !normalized || log.name.en.toLowerCase().includes(normalized) || log.name.ar.includes(search);
-      return filterOk && searchOk;
-    });
+  async clearNotifications(): Promise<NotificationItem[]> {
+    await request("/api/notifications", { method: "POST", body: { action: "clear" } });
+    return request<NotificationItem[]>("/api/notifications");
+  },
+
+  async markNotificationsRead(): Promise<void> {
+    await request("/api/notifications", { method: "POST", body: { action: "read" } });
+  },
+
+  async attendanceLogs(filter: "today" | "thisWeek" | "all", search = ""): Promise<AttendanceLog[]> {
+    const params = new URLSearchParams({ filter, search });
+    return request<AttendanceLog[]>(`/api/attendance?${params.toString()}`);
   },
 
   async adminComms() {
-    await wait();
-    return { birthdays, receipts, absences, approvedMembers: members.filter((member) => member.status === "approved") };
+    return request<{
+      birthdays: { id: string; name: { ar: string; en: string }; date: { ar: string; en: string }; days: number }[];
+      receipts: { id: string; title: { ar: string; en: string }; delivered: number; read: number }[];
+      absences: { id: string; name: { ar: string; en: string }; last: { ar: string; en: string }; streak: number }[];
+      approvedMembers: { id: string; name: { ar: string; en: string }; phone: string }[];
+    }>("/api/admin/comms");
   },
 
   async sendAlert(input: SendAlertInput) {
-    await wait();
-    const next: NotificationItem = {
-      id: `n-${Date.now()}`,
-      title: input.type === "standard" ? { ar: "إشعار جديد", en: "New alert" } : { ar: "رسالة مخصصة", en: "Custom message" },
-      body: { ar: input.message, en: input.message },
-      time: { ar: "الآن", en: "Now" },
-      unread: true,
-    };
-    notifications = [next, ...notifications];
-    return { delivered: input.recipientIds.length };
-  },
-
-  async pendingMembers() {
-    await wait();
-    return members.filter((member) => member.status === "pending");
-  },
-
-  async updateMemberStatus(id: string, status: MemberStatus) {
-    await wait();
-    members = members.map((member) =>
-      member.id === id
-        ? {
-            ...member,
-            status,
-            approvedBy: status === "approved" ? { ar: "أ. جورج", en: "A. George" } : member.approvedBy,
-          }
-        : member,
-    );
-    return members.find((member) => member.id === id);
-  },
-
-  async createMember(input: ManualMemberInput) {
-    await this.register(input);
-    members = members.map((member, index) => (index === 0 ? { ...member, role: input.role, status: "approved" } : member));
-    return members[0];
-  },
-
-  async members(role: Role | "all", status: MemberStatus | "all", search = "") {
-    await wait();
-    const normalized = search.trim().toLowerCase();
-    return members.filter((member) => {
-      const roleOk = role === "all" || member.role === role;
-      const statusOk = status === "all" || member.status === status;
-      const searchOk = !normalized || member.name.en.toLowerCase().includes(normalized) || member.phone.includes(normalized) || member.name.ar.includes(search);
-      return roleOk && statusOk && searchOk;
+    return request<{ delivered: number }>("/api/admin/comms", {
+      method: "POST",
+      body: { type: input.type, message: input.message, recipientIds: input.recipientIds },
     });
   },
 
-  async dashboard() {
-    await wait();
-    return { stats: { ...dashboardStats, pendingApprovals: members.filter((member) => member.status === "pending").length }, recentActivity };
+  async pendingMembers(): Promise<MemberRecord[]> {
+    return request<MemberRecord[]>("/api/admin/members?status=pending");
   },
 
-  async recordAttendance(payloadText: string, scannedBy: User, fridayCategory?: string) {
-    await wait();
-    try {
-      const parsed = qrPayloadSchema.parse(JSON.parse(payloadText));
-      const member = members.find((item) => item.id === parsed.memberId || item.phone === parsed.phone);
-      if (!member) throw new Error("Member not found");
-      const next: AttendanceLog = {
-        id: `scan-${Date.now()}`,
-        memberId: member.id,
-        name: member.name,
-        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-        date: { ar: "اليوم", en: "Today" },
-        status: "on-time",
-        scannedBy: scannedBy.name,
-        fridayCategory: fridayCategory || null,
-      };
-      attendanceLogs = [next, ...attendanceLogs];
-      members = members.map((item) =>
-        item.id === member.id
-          ? { ...item, lastAttendance: { ar: "اليوم", en: "Today" }, scannedBy: scannedBy.name, attendanceHistory: [next, ...item.attendanceHistory] }
-          : item,
-      );
-      return next;
-    } catch {
-      throw new Error("Invalid QR code");
-    }
+  async updateMemberStatus(id: string, status: MemberStatus) {
+    return request("/api/admin/members", {
+      method: "POST",
+      body: { action: "update-status", id, status },
+    });
+  },
+
+  async createMember(input: ManualMemberInput) {
+    return request("/api/admin/members", {
+      method: "POST",
+      body: {
+        action: "create",
+        nameEn: `${input.firstName} ${input.lastName}`.trim(),
+        nameAr: `${input.firstName} ${input.lastName}`.trim(),
+        phone: input.phone,
+        email: input.email || undefined,
+        birthday: input.birthday,
+        spousePhone: input.spousePhone || undefined,
+        role: input.role,
+        password: input.password,
+      },
+    });
+  },
+
+  async members(role: Role | "all", status: MemberStatus | "all", search = ""): Promise<MemberRecord[]> {
+    const params = new URLSearchParams({ role, status, search });
+    return request<MemberRecord[]>(`/api/admin/members?${params.toString()}`);
+  },
+
+  async dashboard() {
+    return request<{
+      stats: { totalMembers: number; totalAdmins: number; todayCheckIns: number; pendingApprovals: number };
+      recentActivity: { id: string; text: { ar: string; en: string }; time: { ar: string; en: string } }[];
+    }>("/api/super/dashboard");
+  },
+
+  async reports(type = "all") {
+    return request<any>(`/api/reports?type=${encodeURIComponent(type)}`);
+  },
+
+  async recordAttendance(payloadText: string, _scannedBy: User, fridayCategory?: string): Promise<AttendanceLog & { setCompleted?: boolean }> {
+    return request<AttendanceLog & { setCompleted?: boolean }>("/api/attendance", {
+      method: "POST",
+      body: { payload: payloadText, fridayCategory },
+    });
   },
 
   async updateProfilePhoto(user: User, photoUri: string): Promise<User> {
-    await wait();
+    // Profile photo persistence is handled client-side via session for now;
+    // the backend exposes no photo endpoint. Return the updated user.
     return { ...user, photoUri };
   },
 
-  async setNotifications(): Promise<import("@/types").SetNotification[]> {
-    await wait();
-    // Mock: return empty array since mock data layer has no set notifications
-    return [];
+  async setNotifications(): Promise<SetNotification[]> {
+    return request<SetNotification[]>("/api/set-notifications?acknowledged=false");
   },
 
   async acknowledgeSetNotification(id: string): Promise<void> {
-    await wait();
+    await request(`/api/set-notifications/${id}/acknowledge`, { method: "PATCH" });
   },
 };

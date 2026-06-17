@@ -4,6 +4,7 @@ import { adminPermissions, members } from "../../../db/schema";
 import { eq, and } from "drizzle-orm";
 import { verifyToken } from "../../../lib/auth-server";
 import type { Permission } from "../../../lib/permissions";
+import { writeActivityLog } from "../../../lib/audit";
 
 const VALID_PERMISSIONS: Permission[] = ["scan", "view_logs", "send_messages", "generate_reports"];
 
@@ -81,6 +82,14 @@ export const Route = createAPIFileRoute("/api/admin/$id/permissions")({
 
       const updated = await db.query.adminPermissions.findMany({
         where: eq(adminPermissions.memberId, id),
+      });
+
+      await writeActivityLog({
+        action: "permissions_changed",
+        textAr: `${tokenUser.name.ar} حدّث صلاحيات ${targetMember.nameAr}: ${permissionsArr.join("، ") || "لا شيء"}`,
+        textEn: `${tokenUser.name.en} updated permissions for ${targetMember.nameEn}: ${permissionsArr.join(", ") || "none"}`,
+        actorId: tokenUser.id,
+        targetId: id,
       });
 
       return new Response(

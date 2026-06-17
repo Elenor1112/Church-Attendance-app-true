@@ -3,6 +3,7 @@ import { db } from "../../../db";
 import { members, attendanceLogs } from "../../../db/schema";
 import { eq, desc } from "drizzle-orm";
 import { verifyToken, hashPassword } from "../../../lib/auth-server";
+import { writeActivityLog } from "../../../lib/audit";
 
 export const Route = createAPIFileRoute("/api/admin/members")({
   GET: async ({ request }) => {
@@ -38,6 +39,8 @@ export const Route = createAPIFileRoute("/api/admin/members")({
           spousePhone: m.spousePhone || undefined,
           role: m.role,
           status: m.status,
+          active: m.active,
+          completedSets: m.completedSets,
           registered: m.registered,
           approvedBy: m.approvedBy ? { ar: m.approvedBy, en: m.approvedBy } : null,
           lastAttendance: lastLog ? { ar: lastLog.dateAr, en: lastLog.dateEn } : null,
@@ -99,6 +102,15 @@ export const Route = createAPIFileRoute("/api/admin/members")({
         const updated = await db.query.members.findFirst({
           where: eq(members.id, id),
         });
+
+        await writeActivityLog({
+          action: "member_status_changed",
+          textAr: `${tokenUser.name.ar} غيّر حالة ${updated?.nameAr ?? id} إلى ${status}`,
+          textEn: `${tokenUser.name.en} set ${updated?.nameEn ?? id} status to ${status}`,
+          actorId: tokenUser.id,
+          targetId: id,
+        });
+
         return new Response(JSON.stringify(updated), {
           status: 200,
           headers: { "Content-Type": "application/json" },
@@ -106,8 +118,8 @@ export const Route = createAPIFileRoute("/api/admin/members")({
       }
 
       if (action === "create") {
-        if (!nameAr || !nameEn || !phone || !role) {
-          return new Response(JSON.stringify({ error: "Missing required fields" }), {
+        if (!nameAr || !nameEn || !phone || !role || !password) {
+          return new Response(JSON.stringify({ error: "Missing required fields (name, phone, role, password)" }), {
             status: 400,
             headers: { "Content-Type": "application/json" },
           });
@@ -124,7 +136,7 @@ export const Route = createAPIFileRoute("/api/admin/members")({
         }
 
         const memberId = `m-${Date.now()}`;
-        const defaultHash = await hashPassword(password || "demo");
+        const passwordHash = await hashPassword(password);
 
         await db.insert(members).values({
           id: memberId,
@@ -134,7 +146,7 @@ export const Route = createAPIFileRoute("/api/admin/members")({
           email: email || null,
           birthday: birthday || null,
           spousePhone: spousePhone || null,
-          passwordHash: defaultHash,
+          passwordHash,
           role,
           status: "approved",
           registered: new Date().toISOString().slice(0, 10),
@@ -142,11 +154,78 @@ export const Route = createAPIFileRoute("/api/admin/members")({
           photoUri: null,
         });
 
+        await writeActivityLog({
+          action: "member_status_changed",
+          textAr: `${tokenUser.name.ar} أنشأ عضوًا: ${nameAr}`,
+          textEn: `${tokenUser.name.en} created member: ${nameEn}`,
+          actorId: tokenUser.id,
+          targetId: memberId,
+        });
+
         const created = await db.query.members.findFirst({
           where: eq(members.id, memberId),
         });
         return new Response(JSON.stringify(created), {
           status: 201,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      // --- Super-admin only: edit / deactivate / reactivate an admin account ---
+      if (action === "update-admin" || action === "deactivate" || action === "reactivate") {
+        if (tokenUser.role !== "super-admin") {
+          return new Response(JSON.stringify({ error: "Super admin only", code: "UNAUTHORIZED" }), {
+            status: 403,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+        if (!id) {
+          return new Response(JSON.stringify({ error: "Missing member id" }), {
+            status: 400,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+
+        const target = await db.query.members.findFirst({ where: eq(members.id, id) });
+        if (!target) {
+          return new Response(JSON.stringify({ error: "Member not found" }), {
+            status: 404,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+
+        if (action === "update-admin") {
+          const updates: Record<string, unknown> = {};
+          if (nameAr) updates.nameAr = nameAr;
+          if (nameEn) updates.nameEn = nameEn;
+          if (phone) updates.phone = phone;
+          if (email !== undefined) updates.email = email || null;
+          if (password) updates.passwordHash = await hashPassword(password);
+          await db.update(members).set(updates).where(eq(members.id, id));
+
+          await writeActivityLog({
+            action: "permissions_changed",
+            textAr: `${tokenUser.name.ar} عدّل بيانات ${target.nameAr}`,
+            textEn: `${tokenUser.name.en} edited ${target.nameEn}'s details`,
+            actorId: tokenUser.id,
+            targetId: id,
+          });
+        } else {
+          const active = action === "reactivate";
+          await db.update(members).set({ active }).where(eq(members.id, id));
+
+          await writeActivityLog({
+            action: active ? "admin_reactivated" : "admin_deactivated",
+            textAr: `${tokenUser.name.ar} ${active ? "أعاد تفعيل" : "عطّل"} ${target.nameAr}`,
+            textEn: `${tokenUser.name.en} ${active ? "reactivated" : "deactivated"} ${target.nameEn}`,
+            actorId: tokenUser.id,
+            targetId: id,
+          });
+        }
+
+        const updated = await db.query.members.findFirst({ where: eq(members.id, id) });
+        return new Response(JSON.stringify(updated), {
+          status: 200,
           headers: { "Content-Type": "application/json" },
         });
       }
