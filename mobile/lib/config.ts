@@ -8,4 +8,4 @@ import Constants from "expo-constants";
 export const API_URL: string =
   process.env.EXPO_PUBLIC_API_URL ||
   (Constants.expoConfig?.extra as { apiUrl?: string } | undefined)?.apiUrl ||
-  "http://localhost:3000";
+  "https://church-attendance-app-true-production.up.railway.app";

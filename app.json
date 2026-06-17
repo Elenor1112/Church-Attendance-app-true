@@ -70,7 +70,7 @@
       "eas": {
         "projectId": "cf4bb018-1f15-4702-b162-f599e2863a41"
       },
-      "apiUrl": "http://localhost:3000"
+      "apiUrl": "https://church-attendance-app-true-production.up.railway.app"
     }
   }
 }
